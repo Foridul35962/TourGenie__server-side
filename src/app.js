@@ -7,7 +7,7 @@ import swaggerUi from "swagger-ui-express";
 import errorHandler from './helpers/ErrorHandler.js'
 import { swaggerSpec } from './config/swagger.js';
 import authRouter from './routes/auth.routes.js';
-import "./config/redis.js";
+import { startServer } from './config/redis.js';
 
 const app = express()
 
@@ -20,6 +20,9 @@ app.use(cookies())
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: false }))
+
+//redis
+startServer()
 
 //routes
 app.use('/api/auth', authRouter)
