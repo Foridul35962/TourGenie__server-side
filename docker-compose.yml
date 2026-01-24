@@ -1,13 +1,29 @@
 version: "3.8"
 
 services:
+  backend:
+    build:
+      context: .
+      dockerfile: DockerFile
+    container_name: tourgenie_backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    depends_on:
+      - redis
+    env_file:
+      - .env.docker
+    volumes:
+      - .:/backend
+      - /backend/node_modules
+
   redis:
     image: redis:7-alpine
     container_name: tourgenie_redis
     restart: unless-stopped
     ports:
       - "6380:6379"
-    command: ["redis-server", "--appendonly", "yes"]
+    command: [ "redis-server", "--appendonly", "yes" ]
     volumes:
       - tourgenie_redis_data:/data
 
