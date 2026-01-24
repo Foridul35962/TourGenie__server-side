@@ -42,20 +42,15 @@ const authRouter = express.Router()
  *   patch:
  *     summary: Reset password
  *     tags: [Auth]
- *
- * /api/auth/get-user:
- *   get:
- *     summary: Get logged-in user
- *     tags: [Auth]
- *
- * /api/auth/update-location:
- *   post:
- *     summary: Update user location
- *     tags: [Auth]
  */
 
 
 authRouter.post('/register', authController.registration)
 authRouter.post('/verify-regi', authController.verifyRegi)
+authRouter.post('/login', authController.login)
+authRouter.get('/logout', authController.logout)
+authRouter.post('/forget-pass', authController.forgetPass)
+authRouter.post('/verify-pass', authController.verifyForgetPass)
+authRouter.patch('/reset-pass', authController.resetPass)
 
 export default authRouter
