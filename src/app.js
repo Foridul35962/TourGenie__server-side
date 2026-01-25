@@ -8,6 +8,7 @@ import errorHandler from './helpers/ErrorHandler.js'
 import { swaggerSpec } from './config/swagger.js';
 import authRouter from './routes/auth.routes.js';
 import { startServer } from './config/redis.js';
+import userRouter from './routes/user.routes.js';
 
 const app = express()
 
@@ -26,6 +27,7 @@ startServer()
 
 //routes
 app.use('/api/auth', authRouter)
+app.use('/api/user', userRouter)
 
 
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
