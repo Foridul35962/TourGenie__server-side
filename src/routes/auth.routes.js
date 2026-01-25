@@ -42,6 +42,10 @@ const authRouter = express.Router()
  *   patch:
  *     summary: Reset password
  *     tags: [Auth]
+ * /api/auth/resend-otp:
+ *   post:
+ *     summary: Resend Otp
+ *     tags: [Auth]
  */
 
 
@@ -52,5 +56,6 @@ authRouter.get('/logout', authController.logout)
 authRouter.post('/forget-pass', authController.forgetPass)
 authRouter.post('/verify-pass', authController.verifyForgetPass)
 authRouter.patch('/reset-pass', authController.resetPass)
+authRouter.post('/resend-otp', authController.resendOtp)
 
 export default authRouter

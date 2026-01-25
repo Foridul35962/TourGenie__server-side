@@ -292,3 +292,76 @@ export const resetPass = [
             )
     })
 ]
+
+export const resendOtp = AsyncHandler(async(req, res)=>{
+    const {email, type} = req.body
+
+    if (!email) {
+        throw new ApiErrors(400, 'email are required')
+    }
+    if (!type || !['register', 'forgetPass'].includes(type)) {
+        throw new ApiErrors(400, 'type must be register or forgetPass')
+    }
+
+    // cooldown 60 sec
+    const cooldownKey = `otp:cooldown:${type}:${email}`
+    const inCooldown = await redis.get(cooldownKey)
+
+    if (inCooldown) {
+        const ttl = await redis.ttl(cooldownKey)
+        throw new ApiErrors(429, `please wait ${ttl}s before resending OTP`)
+    }
+
+    // rate limit
+    const limitKey = `otp:rate:${type}:${email}`
+    const count = await redis.incr(limitKey)
+    if (count === 1) {
+        await redis.expire(limitKey, 600)
+    }
+    if (count > 5) {
+        throw new ApiErrors(429, 'too many request')
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString()
+
+    if (type === 'register') {
+        const existingUser = await Users.findOne({email})
+        if (existingUser) {
+            throw new ApiErrors(400, 'user is already registered')
+        }
+
+        const raw = await redis.get(`register:otp:${email}`)
+        if (!raw) {
+            throw new ApiErrors(400, 'otp expired or no pending registration found. Please register again')
+        }
+
+        const data = JSON.parse(raw)
+        await redis.set(`register:otp:${email}`,
+            JSON.stringify({...data, otp}),
+            "EX", 300
+        )
+
+        const {subject, html} = generateVerificationMail(otp)
+        await sendBrevoMail(email, subject, html)
+    }
+    else if(type === 'forgetPass'){
+        const user = await Users.findOne({email})
+        if (!user) {
+            throw new ApiErrors(400, 'user is not registered')
+        }
+
+        await redis.set(`forget:otp:${email}`,
+            JSON.stringify({otp, verified: false}),
+            "EX", 300
+        )
+
+        const {subject, html} = generatePasswordResetMail(otp)
+        await sendBrevoMail(email, subject, html)
+    }
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(200, {}, 'otp resended')
+        )
+})
