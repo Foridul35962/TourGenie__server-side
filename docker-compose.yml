@@ -23,7 +23,7 @@ services:
     restart: unless-stopped
     ports:
       - "6380:6379"
-    command: [ "redis-server", "--appendonly", "yes" ]
+    command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - tourgenie_redis_data:/data
 
@@ -40,3 +40,4 @@ services:
 
 volumes:
   tourgenie_redis_data:
+  tourgenie_redisinsight_data:

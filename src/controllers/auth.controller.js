@@ -293,8 +293,8 @@ export const resetPass = [
     })
 ]
 
-export const resendOtp = AsyncHandler(async(req, res)=>{
-    const {email, type} = req.body
+export const resendOtp = AsyncHandler(async (req, res) => {
+    const { email, type } = req.body
 
     if (!email) {
         throw new ApiErrors(400, 'email are required')
@@ -325,7 +325,7 @@ export const resendOtp = AsyncHandler(async(req, res)=>{
     const otp = Math.floor(100000 + Math.random() * 900000).toString()
 
     if (type === 'register') {
-        const existingUser = await Users.findOne({email})
+        const existingUser = await Users.findOne({ email })
         if (existingUser) {
             throw new ApiErrors(400, 'user is already registered')
         }
@@ -337,25 +337,25 @@ export const resendOtp = AsyncHandler(async(req, res)=>{
 
         const data = JSON.parse(raw)
         await redis.set(`register:otp:${email}`,
-            JSON.stringify({...data, otp}),
+            JSON.stringify({ ...data, otp }),
             "EX", 300
         )
 
-        const {subject, html} = generateVerificationMail(otp)
+        const { subject, html } = generateVerificationMail(otp)
         await sendBrevoMail(email, subject, html)
     }
-    else if(type === 'forgetPass'){
-        const user = await Users.findOne({email})
+    else if (type === 'forgetPass') {
+        const user = await Users.findOne({ email })
         if (!user) {
             throw new ApiErrors(400, 'user is not registered')
         }
 
         await redis.set(`forget:otp:${email}`,
-            JSON.stringify({otp, verified: false}),
+            JSON.stringify({ otp, verified: false }),
             "EX", 300
         )
 
-        const {subject, html} = generatePasswordResetMail(otp)
+        const { subject, html } = generatePasswordResetMail(otp)
         await sendBrevoMail(email, subject, html)
     }
 
