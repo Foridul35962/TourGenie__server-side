@@ -27,43 +27,47 @@ export const registration = [
         .withMessage('password must contain a number'),
 
     AsyncHandler(async (req, res) => {
-        try {
-            const { fullName, email, password } = req.body
+        const { fullName, email, password } = req.body
 
-            const error = validationResult(req)
-            if (!error.isEmpty()) {
-                throw new ApiErrors(400, 'entered wrong value', error.array())
-            }
-
-            const exestingUser = await Users.findOne({ email })
-            if (exestingUser) {
-                throw new ApiErrors(400, 'user is already registed')
-            }
-
-            const hashedPassword = await bcrypt.hash(password, 12)
-
-            const otp = Math.floor(100000 + Math.random() * 900000).toString()
-            await redis.set(`register:otp:${email}`,
-                JSON.stringify({
-                    fullName,
-                    password: hashedPassword,
-                    otp
-                }),
-                "EX", 300
-            )
-
-            const { subject, html } = generateVerificationMail(otp)
-
-            await sendBrevoMail(email, subject, html)
-
-            return res
-                .status(200)
-                .json(
-                    new ApiResponse(200, {}, 'otp send successfully')
-                )
-        } catch (error) {
-            console.log(error)
+        const error = validationResult(req)
+        if (!error.isEmpty()) {
+            throw new ApiErrors(400, 'entered wrong value', error.array())
         }
+
+        const exestingUser = await Users.findOne({ email })
+        if (exestingUser) {
+            throw new ApiErrors(400, 'user is already registed')
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 12)
+
+        const otp = Math.floor(100000 + Math.random() * 900000).toString()
+        await redis.set(`register:otp:${email}`,
+            JSON.stringify({
+                fullName,
+                password: hashedPassword,
+                otp
+            }),
+            "EX", 300
+        )
+
+        const { subject, html } = generateVerificationMail(otp)
+
+        await sendBrevoMail(email, subject, html)
+
+
+        await redis.set(
+            `otp:cooldown:register:${email}`,
+            "1",
+            "EX",
+            60
+        )
+
+        return res
+            .status(200)
+            .json(
+                new ApiResponse(200, {}, 'otp send successfully')
+            )
     })
 ]
 
@@ -202,10 +206,17 @@ export const forgetPass = AsyncHandler(async (req, res) => {
 
     await sendBrevoMail(email, subject, html)
 
+    await redis.set(
+        `otp:cooldown:forgetPass:${email}`,
+        "1",
+        "EX",
+        60
+    )
+
     return res
         .status(200)
         .json(
-            new ApiResponse(200, 'reset otp send successfully')
+            new ApiResponse(200, {}, 'reset otp send successfully')
         )
 })
 
@@ -217,6 +228,11 @@ export const verifyForgetPass = AsyncHandler(async (req, res) => {
     }
 
     const count = await redis.incr(`forget:${email}`)
+
+    if (count === 1) {
+        redis.expire(`forget:${email}`, 600)
+    }
+
     if (count > 10) {
         throw new ApiErrors(429, 'too many request')
     }
@@ -228,7 +244,7 @@ export const verifyForgetPass = AsyncHandler(async (req, res) => {
     }
     const data = JSON.parse(otpKey)
 
-    if (data.otp !== otp) {
+    if (data.otp.toString() !== otp.toString()) {
         throw new ApiErrors(400, 'otp is not matched')
     }
 
@@ -357,6 +373,8 @@ export const resendOtp = AsyncHandler(async (req, res) => {
 
         const { subject, html } = generatePasswordResetMail(otp)
         await sendBrevoMail(email, subject, html)
+        
+        await redis.set(`otp:cooldown:${type}:${email}`, "1", "EX", 60)
     }
 
     return res
