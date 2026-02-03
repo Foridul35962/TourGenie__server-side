@@ -160,12 +160,12 @@ const makeCacheKey = ({ origin, destination, budget, members, days, prompt }) =>
 };
 
 export const createPlan = AsyncHandler(async (req, res) => {
-    const { origin, destination, budget, members, days, prompt } = req.body;
+    const { origin, destination, budgetType, members, days, prompt } = req.body;
 
     if (
         origin == null ||
         destination == null ||
-        budget == null ||
+        budgetType == null ||
         members == null ||
         days == null ||
         prompt == null
@@ -177,7 +177,7 @@ export const createPlan = AsyncHandler(async (req, res) => {
     const route = `${origin} to ${destination}`;
 
     // redis cache check
-    const cacheKey = makeCacheKey({ origin, destination, budget, members, days, prompt });
+    const cacheKey = makeCacheKey({ origin, destination, budgetType, members, days, prompt });
     const cached = await redis.get(cacheKey);
 
     if (cached) {
@@ -216,7 +216,13 @@ export const createPlan = AsyncHandler(async (req, res) => {
             - dailyItinerary array MUST contain exactly ${days} objects.
             - Day numbering must start from 1 and end at ${days}.
             - Costs must be realistic for Bangladesh context unless origin/destination imply otherwise.
+            - Costs must reflect TOTAL for ${members} travelers.
             - Return ONLY valid JSON. No markdown, no explanations.
+
+            IMPORTANT STRUCTURE RULE:
+            - dailyItinerary[].activities MUST be an array of OBJECTS (NOT strings).
+            - Each activity object MUST contain a clear placeName so UI can show place names separately.
+            - If multiple places are visited in one day, create multiple activity objects in that day.
 
             Strict JSON format (keys must match exactly):
             {
@@ -229,17 +235,34 @@ export const createPlan = AsyncHandler(async (req, res) => {
                 "destination": "",
                 "days": 0,
                 "prompt": { "transport": "", "pace": "" },
+
                 "transportation": { "mode": "", "details": "", "estimatedCost": "" },
+
                 "accommodation": [
                 { "hotelName": "", "type": "", "description": "", "estimatedCostPerNight": "" }
                 ],
+
                 "dailyItinerary": [
-                { "day": 1, "activities": [] }
+                {
+                    "day": 1,
+                    "activities": [
+                    {
+                        "timeSlot": "Morning/Afternoon/Evening/Night",
+                        "placeName": "",
+                        "area": "",
+                        "description": "",
+                        "estimatedCost": "",
+                        "tips": ""
+                    }
+                    ]
+                }
                 ],
+
                 "food": {
                 "famousLocalDishes": [],
                 "recommendations": ""
                 },
+
                 "budgetBreakdown": {
                 "transportation": { "description": "", "estimatedCost": "" },
                 "accommodation": { "description": "", "estimatedCost": "" },
@@ -259,7 +282,7 @@ export const createPlan = AsyncHandler(async (req, res) => {
         - Origin: ${origin}
         - Destination: ${destination}
         - Route: ${route}
-        - Budget category: ${budget}
+        - Budget category: ${budgetType}
         - Travelers: ${members}
         - Duration: ${days} days
         - User's Specific Request: ${prompt}
@@ -267,7 +290,10 @@ export const createPlan = AsyncHandler(async (req, res) => {
         Important:
         - Create EXACTLY ${days} daily itinerary items.
         - Costs must reflect total for ${members} travelers.
-    `;
+        - dailyItinerary[].activities must be an array of objects (not strings).
+        - Each activity MUST include placeName (e.g., "Nilgiri Hill", "Buddha Dhatu Jadi").
+        - Use timeSlot per activity and split a day into multiple activities if multiple places are visited.
+`;
 
     try {
         const result = await model.generateContent({
@@ -282,6 +308,6 @@ export const createPlan = AsyncHandler(async (req, res) => {
 
         return res.status(200).json(new ApiResponse(200, reply, "trip plan successfully"));
     } catch (error) {
-        throw new ApiErrors(500, error?.message || "Trip plan generation failed");
+        throw new ApiErrors(500, "Trip plan generation failed. Try again");
     }
 });
