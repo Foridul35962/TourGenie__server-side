@@ -4,6 +4,7 @@ import ApiErrors from "../helpers/ApiErrors.js";
 import ApiResponse from "../helpers/ApiResponse.js";
 import AsyncHandler from "../helpers/AsyncHandler.js";
 import redis from "../config/redis.js";
+import axios from 'axios'
 
 
 const normalizePrompt = (p) => p.trim().replace(/\s+/g, " ").toLowerCase();
@@ -159,6 +160,60 @@ const makeCacheKey = ({ origin, destination, budget, members, days, prompt }) =>
     );
 };
 
+const makePhotoUrl = (photoRef, maxwidth = 1200) => {
+    if (!photoRef) return null;
+    const base = process.env.SERVER_URL?.replace(/\/$/, "");
+    return `${base}/api/places/photo?ref=${encodeURIComponent(photoRef)}&maxwidth=${maxwidth}`;
+};
+
+const getPhotoRefByName = async (name) => {
+    const q = normalize(name);
+    if (!q) return null;
+
+    const cacheKey = `places:photoRef:v1:${hashKey(q)}`;
+    const cached = await redis.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+
+    const url = "https://maps.googleapis.com/maps/api/place/textsearch/json";
+    const { data } = await axios.get(
+        url,
+        { params: { query: q, key: process.env.GOOGLE_MAPS_API_KEY }, timeout: 12000 }
+    );
+
+    const first = data?.results?.[0];
+    const photoRef = first?.photos?.[0]?.photo_reference || null;
+
+    const payload = first
+        ? {
+            photoRef,
+            placeId: first.place_id || null,
+            name: first.name || q,
+            address: first.formatted_address || null,
+        }
+        : null;
+    await redis.set(cacheKey, JSON.stringify(payload), "EX", 60 * 60 * 24 * 7);
+    return payload;
+};
+
+const mapWithConcurrency = async (items, limit, fn) => {
+    const results = new Array(items.length);
+    let idx = 0;
+
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+        while (idx < items.length) {
+            const current = idx++;
+            try {
+                results[current] = await fn(items[current], current);
+            } catch (e) {
+                results[current] = null;
+            }
+        }
+    });
+
+    await Promise.all(workers);
+    return results;
+};
+
 export const createPlan = AsyncHandler(async (req, res) => {
     const { origin, destination, budgetType, members, days, prompt } = req.body;
 
@@ -301,7 +356,49 @@ export const createPlan = AsyncHandler(async (req, res) => {
             generationConfig: { responseMimeType: "application/json" },
         });
 
-        const reply = JSON.parse(result.response.text());
+        const raw = JSON.parse(result.response.text())
+
+        const plan = raw?.plan ?? raw
+        const reply = raw?.plan ? raw : { success: true, plan }
+
+        if (plan) {
+            const hotels = Array.isArray(plan.accommodation) ? plan.accommodation : [];
+            await mapWithConcurrency(hotels, 4, async (h) => {
+                const name = h?.hotelName;
+                if (!name) {
+                    h.imageUrl = null;
+                    return null;
+                }
+                const info = await getPhotoRefByName(`${name} ${destination}`);
+                h.imageUrl = info?.photoRef ? makePhotoUrl(info.photoRef, 1200) : null;
+                h.placeId = info?.placeId || null;
+                return null;
+            });
+
+            const daysArr = Array.isArray(plan.dailyItinerary) ? plan.dailyItinerary : [];
+
+            const activities = [];
+            for (const dayObj of daysArr) {
+                const acts = Array.isArray(dayObj?.activities) ? dayObj.activities : [];
+                for (const act of acts) {
+                    if (act && act.placeName) activities.push(act);
+                    else if (act) act.imageUrl = null;
+                }
+            }
+
+            await mapWithConcurrency(activities, 6, async (act) => {
+                const placeName = act?.placeName;
+                if (!placeName) {
+                    act.imageUrl = null;
+                    return null;
+                }
+
+                const info = await getPhotoRefByName(`${placeName} ${destination}`);
+                act.imageUrl = info?.photoRef ? makePhotoUrl(info.photoRef, 1200) : null;
+                act.placeId = info?.placeId || null;
+                return null;
+            });
+        }
 
         // cache set
         await redis.set(cacheKey, JSON.stringify(reply), "EX", 60 * 60 * 24);

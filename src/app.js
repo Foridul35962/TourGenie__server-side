@@ -11,6 +11,7 @@ import { startServer } from './config/redis.js';
 import userRouter from './routes/user.routes.js';
 import aiRouter from './routes/ai.routes.js';
 import tripPlanRouter from './routes/tripPlan.routes.js';
+import placeRouter from './routes/place.routes.js';
 
 const app = express()
 
@@ -32,6 +33,7 @@ app.use('/api/auth', authRouter)
 app.use('/api/user', userRouter)
 app.use('/api/ai', aiRouter)
 app.use('/api/tripPlan', tripPlanRouter)
+app.use('/api/places', placeRouter)
 
 
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
