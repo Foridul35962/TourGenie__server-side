@@ -7,7 +7,6 @@ import swaggerUi from "swagger-ui-express";
 import errorHandler from './helpers/ErrorHandler.js'
 import { swaggerSpec } from './config/swagger.js';
 import authRouter from './routes/auth.routes.js';
-import { startServer } from './config/redis.js';
 import userRouter from './routes/user.routes.js';
 import aiRouter from './routes/ai.routes.js';
 import tripPlanRouter from './routes/tripPlan.routes.js';
@@ -24,9 +23,6 @@ app.use(cookies())
 
 app.use(express.json())
 app.use(express.urlencoded({ extended: false }))
-
-//redis
-startServer()
 
 //routes
 app.use('/api/auth', authRouter)
